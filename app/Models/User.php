@@ -25,7 +25,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'role_id'
     ];
 
-    protected $dates = ['email_verified_at'];
+    //protected $dates = ['email_verified_at'];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -43,8 +43,8 @@ class User extends Authenticatable implements MustVerifyEmail
      * @var array<string, string>
      */
     protected $casts = [
-        'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+       // 'email_verified_at' => 'datetime',
+       // 'password' => 'hashed',
     ];
 
     public function Role()

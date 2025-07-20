@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Models\Role;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use function PHPUnit\Framework\returnArgument;
 
 class UserController extends Controller
 {
@@ -16,7 +15,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|exists:roles,name',
+            'role' => 'required|exists:roles,name', // Utilise le nom du rôle
         ]);
 
         $user = User::create([
@@ -25,17 +24,21 @@ class UserController extends Controller
             'password' => bcrypt($request->password),
         ]);
 
+        // Associer le rôle
         $user->role()->associate(Role::where('name', $request->role)->first());
         $user->save();
-
-        $user->sendEmailVerificationNotification();
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-            'message' => 'User registered. Please verify your email.',
+            'message' => 'User registered successfully.',
             'token' => $token,
-            'user' => $user
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role->name,
+            ],
         ], 201);
     }
 
@@ -51,20 +54,41 @@ class UserController extends Controller
         }
 
         $user = auth()->user();
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json(['token' => $token, 'user' => $user]);
+        return response()->json([
+            'token' => $token,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role->name,
+            ],
+            'status' => true
+        ], 200);
     }
 
     public function logout()
     {
         auth()->user()->tokens()->delete();
-        return response()->json(['message' => 'Successfully logged out']);
+        return response()->json([
+            'message' => 'Successfully logged out',
+            'status' => true
+        ], 200);
     }
 
-    public function getUser()
+    public function getUser(Request $request)
     {
-        return response()->json(auth()->user());
+        $user = $request->user();
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role->name,
+            ],
+            'status' => true
+        ], 200);
     }
 }
-
