@@ -28,9 +28,15 @@ class UserController extends Controller
         $user->role()->associate(Role::where('name', $request->role)->first());
         $user->save();
 
+        $user->sendEmailVerificationNotification();
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json(['token' => $token, 'user' => $user], 201);
+        return response()->json([
+            'message' => 'User registered. Please verify your email.',
+            'token' => $token,
+            'user' => $user
+        ], 201);
     }
 
     public function login(Request $request)
