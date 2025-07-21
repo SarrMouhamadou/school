@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\API\ControllerEtudiants;
+use App\Models\Etudiant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\UserController;
@@ -25,3 +27,6 @@ Route::post('/register', [UserController::class, 'register']);
 Route::post('/login', [UserController::class, 'login'])->name('login');
 Route::post('/logout', [UserController::class, 'logout'])->middleware('auth:sanctum');
 Route::post('/user', [UserController::class, 'getUser'])->middleware('auth:sanctum');
+
+Route::post('/etudiant/inscrire', [ControllerEtudiants::class, 'inscrire']);
+Route::get('/etudiants', [ControllerEtudiants::class, 'listerEtudiants']);
