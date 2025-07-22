@@ -31,5 +31,10 @@ Route::post('/user', [UserController::class, 'getUser'])->middleware('auth:sanct
 
 Route::post('/etudiant/inscrire', [ControllerEtudiants::class, 'inscrire']);
 Route::get('/etudiants', [ControllerEtudiants::class, 'listerEtudiants']);
+Route::put('/etudiant/{id}', [ControllerEtudiants::class, 'update']);
+Route::delete('/etudiant/{id}', [ControllerEtudiants::class, 'destroy']);
 
 Route::post('/classe', [ControllerClasses::class, 'store']);
+Route::get('/classes', [ControllerClasses::class, 'index']);
+Route::put('/classe/{id}', [ControllerClasses::class, 'update']);
+Route::delete('/classe/{id}', [ControllerClasses::class, 'destroy']);

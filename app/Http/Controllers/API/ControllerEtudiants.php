@@ -77,4 +77,73 @@ class ControllerEtudiants extends Controller
             'status' => true
         ], 200);
     }
+
+    public function update(Request $request, $id)
+    {
+        $etudiant = Etudiant::find($id);
+
+        if (!$etudiant) {
+            return response()->json([
+                'message' => 'Étudiant non trouvé.',
+                'status' => false
+            ], 404);
+        }
+
+        $request->validate([
+            'prenom' => 'sometimes|required|string|max:255',
+            'nom' => 'sometimes|required|string|max:255',
+            'date_de_naissance' => 'sometimes|required|date|before:today',
+            'classe' => 'nullable|string|max:255',
+        ]);
+
+        $classeNomEntree = $request->input('classe');
+        $classe = $classeNomEntree ? Classe::whereRaw('LOWER(nom) = LOWER(?)', [$classeNomEntree])->first() : null;
+
+        if ($classeNomEntree && !$classe) {
+            return response()->json([
+                'message' => 'Erreur : la classe ' . $classeNomEntree . ' n\'existe pas.',
+                'status' => false
+            ], 400);
+        }
+
+        $classeId = $classe ? $classe->id : null;
+
+        $etudiant->update([
+            'prenom' => $request->input('prenom', $etudiant->prenom),
+            'nom' => $request->input('nom', $etudiant->nom),
+            'date_de_naissance' => $request->input('date_de_naissance', $etudiant->date_de_naissance),
+            'classe_id' => $classeId,
+        ]);
+
+        return response()->json([
+            'message' => 'Étudiant mis à jour avec succès.',
+            'etudiant' => [
+                'id' => $etudiant->id,
+                'prenom' => $etudiant->prenom,
+                'nom' => $etudiant->nom,
+                'matricule' => $etudiant->matricule,
+                'classe' => $etudiant->classe ? $etudiant->classe->nom : null,
+            ],
+            'status' => true
+        ], 200);
+    }
+
+    public function destroy($id)
+    {
+        $etudiant = Etudiant::find($id);
+
+        if (!$etudiant) {
+            return response()->json([
+                'message' => 'Étudiant non trouvé.',
+                'status' => false
+            ], 404);
+        }
+
+        $etudiant->delete();
+
+        return response()->json([
+            'message' => 'Étudiant supprimé avec succès.',
+            'status' => true
+        ], 200);
+    }
 }
