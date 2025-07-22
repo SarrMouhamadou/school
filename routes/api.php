@@ -1,13 +1,11 @@
 <?php
 
 use App\Http\Controllers\API\ControllerEtudiants;
-use App\Models\Etudiant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\UserController;
-use Illuminate\Foundation\Auth\EmailVerificationRequest;
-use App\Models\User;
 use App\Http\Controllers\API\ControllerClasses;
+use App\Http\Controllers\API\ControllerEnseignants;
 
 /*
 |--------------------------------------------------------------------------
@@ -38,3 +36,6 @@ Route::post('/classe', [ControllerClasses::class, 'store']);
 Route::get('/classes', [ControllerClasses::class, 'index']);
 Route::put('/classe/{id}', [ControllerClasses::class, 'update']);
 Route::delete('/classe/{id}', [ControllerClasses::class, 'destroy']);
+
+Route::post('/enseignant', [ControllerEnseignants::class, 'storeEnseignant']);
+Route::post('/enseignant/{enseignantId}/affecter-matiere', [ControllerEnseignants::class, 'affecterMatiere']);
