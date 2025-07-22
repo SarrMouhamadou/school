@@ -14,4 +14,9 @@ class Matiere extends Model
     {
         return $this->belongsToMany(Enseignant::class)->withPivot('classe_id');
     }
+
+    public function classe()
+    {
+        return $this->belongsTo(Classe::class, 'classe_id', 'id');
+    }
 }

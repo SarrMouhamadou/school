@@ -39,8 +39,10 @@ Route::put('/classe/{id}', [ControllerClasses::class, 'update']);
 Route::delete('/classe/{id}', [ControllerClasses::class, 'destroy']);
 
 Route::post('/enseignant', [ControllerEnseignants::class, 'storeEnseignant']);
-Route::post('/enseignant/{enseignantId}/affecter-matiere', [ControllerEnseignants::class, 'affecterMatiere']);
-
+Route::get('/enseignants', [ControllerEnseignants::class, 'index']);
+Route::post('/enseignant/affecter-matiere', [ControllerEnseignants::class, 'affecterMatiere']);
+Route::put('/enseignant/{id}', [ControllerEnseignants::class, 'update']);
+Route::delete('/enseignant/{id}', [ControllerEnseignants::class, 'destroy']);
 
 Route::get('/matieres', [ControllerMatieres::class, 'index']);
 Route::post('/matiere', [ControllerMatieres::class, 'store']);
