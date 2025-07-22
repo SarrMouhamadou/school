@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\UserController;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use App\Models\User;
+use App\Http\Controllers\API\ControllerClasses;
 
 /*
 |--------------------------------------------------------------------------
@@ -30,3 +31,5 @@ Route::post('/user', [UserController::class, 'getUser'])->middleware('auth:sanct
 
 Route::post('/etudiant/inscrire', [ControllerEtudiants::class, 'inscrire']);
 Route::get('/etudiants', [ControllerEtudiants::class, 'listerEtudiants']);
+
+Route::post('/classe', [ControllerClasses::class, 'store']);
