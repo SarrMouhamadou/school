@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use App\Models\Enseignant;
 
 class ControllerEnseignants extends Controller
 {
@@ -37,6 +38,15 @@ class ControllerEnseignants extends Controller
         ]);
 
         $enseignant = Enseignant::findOrFail($enseignantId);
+
+        // Vérifier si l'affectation existe déjà pour éviter les doublons
+        if ($enseignant->matieres()->where('matiere_id', $request->matiere_id)->wherePivot('classe_id', $request->classe_id)->exists()) {
+            return response()->json([
+                'message' => 'Cette affectation existe déjà.',
+                'status' => false
+            ], 400);
+        }
+
         $enseignant->matieres()->attach($request->matiere_id, ['classe_id' => $request->classe_id]);
 
         return response()->json([

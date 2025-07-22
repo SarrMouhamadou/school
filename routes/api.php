@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\ControllerClasses;
 use App\Http\Controllers\API\ControllerEnseignants;
+use App\Http\Controllers\API\ControllerMatieres;
 
 /*
 |--------------------------------------------------------------------------
@@ -39,3 +40,9 @@ Route::delete('/classe/{id}', [ControllerClasses::class, 'destroy']);
 
 Route::post('/enseignant', [ControllerEnseignants::class, 'storeEnseignant']);
 Route::post('/enseignant/{enseignantId}/affecter-matiere', [ControllerEnseignants::class, 'affecterMatiere']);
+
+
+Route::get('/matieres', [ControllerMatieres::class, 'index']);
+Route::post('/matiere', [ControllerMatieres::class, 'store']);
+Route::put('/matiere/{id}', [ControllerMatieres::class, 'update']);
+Route::delete('/matiere/{id}', [ControllerMatieres::class, 'destroy']);
