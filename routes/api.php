@@ -7,6 +7,7 @@ use App\Http\Controllers\API\UserController;
 use App\Http\Controllers\API\ControllerClasses;
 use App\Http\Controllers\API\ControllerEnseignants;
 use App\Http\Controllers\API\ControllerMatieres;
+use App\Http\Controllers\API\ControllerNotes;
 
 /*
 |--------------------------------------------------------------------------
@@ -48,3 +49,8 @@ Route::get('/matieres', [ControllerMatieres::class, 'index']);
 Route::post('/matiere', [ControllerMatieres::class, 'store']);
 Route::put('/matiere/{id}', [ControllerMatieres::class, 'update']);
 Route::delete('/matiere/{id}', [ControllerMatieres::class, 'destroy']);
+
+
+Route::post('/notes', [ControllerNotes::class, 'store']);
+Route::get('/etudiants/{etudiantId}/notes/{semestre}', [ControllerNotes::class, 'getStudentNotes']);
+Route::get('/etudiants/{etudiantId}/bulletin/{semestre}', [ControllerNotes::class, 'calculateBulletin']);
