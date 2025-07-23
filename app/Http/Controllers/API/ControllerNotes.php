@@ -49,35 +49,49 @@ class ControllerNotes extends Controller
 
     public function store(Request $request)
     {
-        $request->validate([
-            'etudiant_id' => 'required|exists:students,id',
-            'matiere_id' => 'required|exists:matieres,id',
-            'valeur' => 'required|numeric|min:0|max:20',
-            'semestre' => 'required|in:S1,S2',
-            'type_evaluation' => 'required|in:devoir,examen',
-        ]);
+        try {
+            $request->validate([
+                'etudiant_id' => 'required|exists:students,id',
+                'matiere_id' => 'required|exists:matieres,id',
+                'valeur' => 'required|numeric|min:0|max:20',
+                'semestre' => 'required|in:S1,S2',
+                'type_evaluation' => 'required|in:devoir,examen',
+            ]);
 
-        $existingNote = Note::where([
-            'etudiant_id' => $request->etudiant_id,
-            'matiere_id' => $request->matiere_id,
-            'semestre' => $request->semestre,
-            'type_evaluation' => $request->type_evaluation,
-        ])->first();
+            $existingNote = Note::where([
+                'etudiant_id' => $request->etudiant_id,
+                'matiere_id' => $request->matiere_id,
+                'semestre' => $request->semestre,
+                'type_evaluation' => $request->type_evaluation,
+            ])->first();
 
-        if ($existingNote) {
+            if ($existingNote) {
+                return response()->json([
+                    'message' => 'Une note existe déjà pour cette évaluation.',
+                    'status' => false
+                ], 400);
+            }
+
+            $note = Note::create($request->only(['etudiant_id', 'matiere_id', 'valeur', 'semestre', 'type_evaluation']));
+
             return response()->json([
-                'message' => 'Une note existe déjà pour cette évaluation.',
+                'message' => 'Note saisie avec succès.',
+                'note' => $note,
+                'status' => true
+            ], 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Les données fournies sont invalides.',
+                'errors' => $e->errors(),
                 'status' => false
-            ], 400);
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Une erreur est survenue.',
+                'error' => $e->getMessage(),
+                'status' => false
+            ], 500);
         }
-
-        $note = Note::create($request->only(['etudiant_id', 'matiere_id', 'valeur', 'semestre', 'type_evaluation']));
-
-        return response()->json([
-            'message' => 'Note saisie avec succès.',
-            'note' => $note,
-            'status' => true
-        ], 201);
     }
 
     public function update(Request $request, $id)
@@ -254,19 +268,27 @@ class ControllerNotes extends Controller
 
     private function getMention($moyenne)
     {
-        if ($moyenne >= 16) return 'Excellent';
-        if ($moyenne >= 14) return 'Très Bien';
-        if ($moyenne >= 12) return 'Bien';
-        if ($moyenne >= 10) return 'Assez Bien';
+        if ($moyenne >= 16)
+            return 'Excellent';
+        if ($moyenne >= 14)
+            return 'Très Bien';
+        if ($moyenne >= 12)
+            return 'Bien';
+        if ($moyenne >= 10)
+            return 'Assez Bien';
         return 'Passable';
     }
 
     private function getAppreciation($moyenne)
     {
-        if ($moyenne >= 16) return 'Excellent effort, continuez ainsi !';
-        if ($moyenne >= 14) return 'Très bon travail, bravo !';
-        if ($moyenne >= 12) return 'Bon travail, à perfectionner.';
-        if ($moyenne >= 10) return 'Satisfaisant, effort à maintenir.';
+        if ($moyenne >= 16)
+            return 'Excellent effort, continuez ainsi !';
+        if ($moyenne >= 14)
+            return 'Très bon travail, bravo !';
+        if ($moyenne >= 12)
+            return 'Bon travail, à perfectionner.';
+        if ($moyenne >= 10)
+            return 'Satisfaisant, effort à maintenir.';
         return 'À améliorer, travail supplémentaire requis.';
     }
 }
