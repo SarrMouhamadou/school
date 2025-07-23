@@ -10,6 +10,43 @@ use Illuminate\Http\Request;
 
 class ControllerNotes extends Controller
 {
+    public function index(Request $request)
+    {
+        $query = Note::with(['etudiant', 'matiere']);
+
+        if ($request->has('semestre') && in_array($request->semestre, ['S1', 'S2'])) {
+            $query->where('semestre', $request->semestre);
+        }
+
+        if ($request->has('etudiant_id') && $request->etudiant_id) {
+            $query->where('etudiant_id', $request->etudiant_id);
+        }
+
+        $notes = $query->get();
+
+        return response()->json([
+            'message' => 'Notes récupérées avec succès.',
+            'notes' => $notes->map(function ($note) {
+                return [
+                    'id' => $note->id,
+                    'etudiant' => [
+                        'id' => $note->etudiant->id,
+                        'nom' => $note->etudiant->nom,
+                        'prenom' => $note->etudiant->prenom,
+                    ],
+                    'matiere' => [
+                        'id' => $note->matiere->id,
+                        'nom' => $note->matiere->nom,
+                    ],
+                    'valeur' => $note->valeur,
+                    'semestre' => $note->semestre,
+                    'type_evaluation' => $note->type_evaluation,
+                ];
+            }),
+            'status' => true
+        ], 200);
+    }
+
     public function store(Request $request)
     {
         $request->validate([
@@ -20,7 +57,6 @@ class ControllerNotes extends Controller
             'type_evaluation' => 'required|in:devoir,examen',
         ]);
 
-        // Vérifier si une note existe déjà pour cette combinaison
         $existingNote = Note::where([
             'etudiant_id' => $request->etudiant_id,
             'matiere_id' => $request->matiere_id,
@@ -42,6 +78,65 @@ class ControllerNotes extends Controller
             'note' => $note,
             'status' => true
         ], 201);
+    }
+
+    public function update(Request $request, $id)
+    {
+        $note = Note::findOrFail($id);
+
+        $request->validate([
+            'etudiant_id' => 'sometimes|exists:students,id',
+            'matiere_id' => 'sometimes|exists:matieres,id',
+            'valeur' => 'sometimes|required|numeric|min:0|max:20',
+            'semestre' => 'sometimes|in:S1,S2',
+            'type_evaluation' => 'sometimes|in:devoir,examen',
+        ]);
+
+        $existingNote = Note::where([
+            'etudiant_id' => $request->etudiant_id ?? $note->etudiant_id,
+            'matiere_id' => $request->matiere_id ?? $note->matiere_id,
+            'semestre' => $request->semestre ?? $note->semestre,
+            'type_evaluation' => $request->type_evaluation ?? $note->type_evaluation,
+        ])->where('id', '!=', $id)->first();
+
+        if ($existingNote) {
+            return response()->json([
+                'message' => 'Une note existe déjà pour cette évaluation.',
+                'status' => false
+            ], 400);
+        }
+
+        $note->update($request->only(['etudiant_id', 'matiere_id', 'valeur', 'semestre', 'type_evaluation']));
+
+        return response()->json([
+            'message' => 'Note mise à jour avec succès.',
+            'note' => $note,
+            'status' => true
+        ], 200);
+    }
+
+    public function destroy($id)
+    {
+        $note = Note::findOrFail($id);
+        $semestre = $note->semestre;
+        $etudiantId = $note->etudiant_id;
+        $note->delete();
+
+        $remainingNotes = Note::where('etudiant_id', $etudiantId)->where('semestre', $semestre)->get();
+        $hasCompleteNotes = $remainingNotes->groupBy('matiere_id')->every(function ($matiereNotes) {
+            return $matiereNotes->where('type_evaluation', 'devoir')->first() && $matiereNotes->where('type_evaluation', 'examen')->first();
+        });
+        if (!$hasCompleteNotes) {
+            return response()->json([
+                'message' => 'Note supprimée, mais le semestre est maintenant incomplet.',
+                'status' => true
+            ], 200);
+        }
+
+        return response()->json([
+            'message' => 'Note supprimée avec succès.',
+            'status' => true
+        ], 200);
     }
 
     public function getStudentNotes($etudiantId, $semestre)
@@ -104,11 +199,17 @@ class ControllerNotes extends Controller
         $moyenneGenerale = $totalPoints / $totalWeighted;
         $mention = $this->getMention($moyenneGenerale);
 
-        // Calcul du rang
         $classeId = $etudiant->classe_id;
         $classMoyennes = Etudiant::where('classe_id', $classeId)
             ->with(['notes.matiere'])
             ->get()
+            ->filter(function ($e) use ($semestre) {
+                $notes = $e->notes->where('semestre', $semestre);
+                $hasCompleteNotes = $notes->groupBy('matiere_id')->every(function ($matiereNotes) {
+                    return $matiereNotes->where('type_evaluation', 'devoir')->first() && $matiereNotes->where('type_evaluation', 'examen')->first();
+                });
+                return $hasCompleteNotes;
+            })
             ->map(function ($e) use ($semestre) {
                 $notes = $e->notes->where('semestre', $semestre);
                 $totalPoints = 0;
@@ -131,7 +232,7 @@ class ControllerNotes extends Controller
             ->values();
 
         $rang = $classMoyennes->search(function ($moyenne) use ($moyenneGenerale) {
-            return abs($moyenne - $moyenneGenerale) < 0.01; // Tolérance pour éviter les erreurs d'arrondi
+            return abs($moyenne - $moyenneGenerale) < 0.01;
         }) + 1;
 
         return response()->json([

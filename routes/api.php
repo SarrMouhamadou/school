@@ -33,6 +33,8 @@ Route::post('/etudiant/inscrire', [ControllerEtudiants::class, 'inscrire']);
 Route::get('/etudiants', [ControllerEtudiants::class, 'listerEtudiants']);
 Route::put('/etudiant/{id}', [ControllerEtudiants::class, 'update']);
 Route::delete('/etudiant/{id}', [ControllerEtudiants::class, 'destroy']);
+Route::get('/etudiants/{etudiantId}/notes/{semestre}', [ControllerNotes::class, 'getStudentNotes']);
+Route::get('/etudiants/{etudiantId}/bulletin/{semestre}', [ControllerNotes::class, 'calculateBulletin']);
 
 Route::post('/classe', [ControllerClasses::class, 'store']);
 Route::get('/classes', [ControllerClasses::class, 'index']);
@@ -52,5 +54,8 @@ Route::delete('/matiere/{id}', [ControllerMatieres::class, 'destroy']);
 
 
 Route::post('/notes', [ControllerNotes::class, 'store']);
-Route::get('/etudiants/{etudiantId}/notes/{semestre}', [ControllerNotes::class, 'getStudentNotes']);
-Route::get('/etudiants/{etudiantId}/bulletin/{semestre}', [ControllerNotes::class, 'calculateBulletin']);
+Route::get('/notes', [ControllerNotes::class, 'index']);
+Route::put('/notes/{id}', [ControllerNotes::class, 'update']);
+Route::delete('/notes/{id}', [ControllerNotes::class, 'destroy']);
+
+
