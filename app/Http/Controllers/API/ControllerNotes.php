@@ -155,7 +155,6 @@ class ControllerNotes extends Controller
 
     public function getStudentNotes($etudiantId, $semestre)
     {
-
         $user = auth()->user();
         if (!$user || !in_array($user->role->name, ['eleve', 'parent'])) {
             return response()->json(['message' => 'Accès non autorisé.', 'status' => false], 403);
@@ -202,7 +201,6 @@ class ControllerNotes extends Controller
         if ($etudiantId != $allowedEtudiantId) {
             return response()->json(['message' => 'Accès non autorisé à cet étudiant.', 'status' => false], 403);
         }
-
 
         $etudiant = Etudiant::with(['notes.matiere'])->findOrFail($etudiantId);
         $notes = $etudiant->notes->where('semestre', $semestre);

@@ -1,13 +1,13 @@
 <?php
 
+use App\Http\Controllers\API\ControllerEtudiants;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\ControllerNotes;
 use App\Http\Controllers\API\UserController;
-use App\Http\Controllers\API\ControllerEtudiants;
 use App\Http\Controllers\API\ControllerClasses;
 use App\Http\Controllers\API\ControllerEnseignants;
 use App\Http\Controllers\API\ControllerMatieres;
+use App\Http\Controllers\API\ControllerNotes;
 
 /*
 |--------------------------------------------------------------------------

@@ -7,8 +7,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -21,7 +22,10 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role_id'
     ];
+
+    //protected $dates = ['email_verified_at'];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -39,11 +43,11 @@ class User extends Authenticatable
      * @var array<string, string>
      */
     protected $casts = [
-        'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+       // 'email_verified_at' => 'datetime',
+       // 'password' => 'hashed',
     ];
 
-    public function role()
+    public function Role()
     {
         return $this->belongsTo(Role::class);
     }
