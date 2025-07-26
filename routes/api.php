@@ -9,6 +9,7 @@ use App\Http\Controllers\API\ControllerEnseignants;
 use App\Http\Controllers\API\ControllerMatieres;
 use App\Http\Controllers\API\ControllerNotes;
 use App\Http\Controllers\API\ControllerParents;
+use App\Http\Controllers\API\DashboardController;
 
 /*
 |--------------------------------------------------------------------------
@@ -48,6 +49,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::put('/parent/{parentId}/link-student', [ControllerParents::class, 'linkStudent']);
     Route::get('/parent/{parentId}/students', [ControllerParents::class, 'getStudents']);
     Route::get('/parents', [ControllerParents::class, 'index']);
+     Route::get('/dashboard', [DashboardController::class, 'index']);
 });
 
 
