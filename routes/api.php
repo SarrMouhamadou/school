@@ -49,8 +49,10 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::put('/parent/{parentId}/link-student', [ControllerParents::class, 'linkStudent']);
     Route::get('/parent/{parentId}/students', [ControllerParents::class, 'getStudents']);
     Route::get('/parents', [ControllerParents::class, 'index']);
-     Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/dashboard/{semestre?}', [DashboardController::class, 'index'])->where('semestre', 'S1|S2');
 });
+
 
 
 Route::middleware(['auth:sanctum', 'role:enseignant'])->group(function () {
