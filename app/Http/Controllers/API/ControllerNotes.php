@@ -352,16 +352,43 @@ class ControllerNotes extends Controller
             return response()->json(['message' => 'Accès non autorisé.', 'status' => false], 403);
         }
 
-        $etudiantId = $user->role->name === 'eleve' ? $user->etudiant_id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
-        if (!$etudiantId) {
-            return response()->json(['message' => 'Aucun étudiant associé.', 'status' => false], 404);
-        }
-
         $bulletins = [];
-        foreach (['S1', 'S2'] as $semestre) {
-            $bulletin = $this->calculateBulletin($etudiantId, $semestre)->getData();
-            if ($bulletin->status) {
-                $bulletins[$semestre] = $bulletin;
+
+        // Si c'est un élève, prendre son etudiant_id
+        if ($user->role->name === 'eleve') {
+            $etudiantId = $user->etudiant_id;
+            if (!$etudiantId) {
+                return response()->json(['message' => 'Aucun étudiant associé.', 'status' => false], 404);
+            }
+            foreach (['S1', 'S2'] as $semestre) {
+                $bulletin = $this->calculateBulletin($etudiantId, $semestre)->getData();
+                if ($bulletin->status) {
+                    $bulletins[$semestre] = $bulletin;
+                }
+            }
+        }
+        // Si c'est un parent, récupérer tous les étudiants associés
+        elseif ($user->role->name === 'parent') {
+            $students = $user->students; // Relation many-to-many via parent_student
+            if ($students->isEmpty()) {
+                return response()->json(['message' => 'Aucun étudiant associé.', 'status' => false], 404);
+            }
+            foreach ($students as $student) {
+                $studentBulletins = [];
+                foreach (['S1', 'S2'] as $semestre) {
+                    $bulletin = $this->calculateBulletin($student->id, $semestre)->getData();
+                    if ($bulletin->status) {
+                        $studentBulletins[$semestre] = $bulletin;
+                    }
+                }
+                $bulletins[$student->id] = [
+                    'etudiant' => [
+                        'id' => $student->id,
+                        'nom' => $student->nom,
+                        'prenom' => $student->prenom,
+                    ],
+                    'bulletins' => $studentBulletins,
+                ];
             }
         }
 
@@ -372,16 +399,21 @@ class ControllerNotes extends Controller
         ], 200);
     }
 
-    public function downloadBulletin($userId, $semestre)
+    public function downloadBulletin($userId, $semestre, $studentId = null)
     {
         $user = auth()->user();
         if (!$user || $user->id != $userId || !in_array($user->role->name, ['eleve', 'parent'])) {
             return response()->json(['message' => 'Accès non autorisé.', 'status' => false], 403);
         }
 
-        $etudiantId = $user->role->name === 'eleve' ? $user->etudiant_id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
+        $etudiantId = $user->role->name === 'eleve' ? $user->etudiant_id : ($studentId ?: $this->getParentStudentId($user->id));
         if (!$etudiantId) {
             return response()->json(['message' => 'Aucun étudiant associé.', 'status' => false], 404);
+        }
+
+        // Vérifier si l'étudiant appartient au parent (si parent)
+        if ($user->role->name === 'parent' && !$user->students()->where('student_id', $etudiantId)->exists()) {
+            return response()->json(['message' => 'Accès non autorisé à cet étudiant.', 'status' => false], 403);
         }
 
         $bulletin = $this->calculateBulletin($etudiantId, $semestre)->getData();
@@ -389,9 +421,9 @@ class ControllerNotes extends Controller
             return response()->json($bulletin, 400);
         }
 
+        $etudiant = Etudiant::findOrFail($etudiantId);
         $pdf = \PDF::loadView('bulletin.pdf', ['bulletin' => $bulletin]);
-        return $pdf->download('bulletin_' . $etudiantId . '_S' . $semestre . '.pdf');
-
+        return $pdf->download('bulletin_' . $etudiant->id . '_S' . $semestre . '.pdf');
     }
 
     private function getMention($moyenne)

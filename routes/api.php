@@ -8,6 +8,7 @@ use App\Http\Controllers\API\ControllerClasses;
 use App\Http\Controllers\API\ControllerEnseignants;
 use App\Http\Controllers\API\ControllerMatieres;
 use App\Http\Controllers\API\ControllerNotes;
+use App\Http\Controllers\API\ControllerParents;
 
 /*
 |--------------------------------------------------------------------------
@@ -43,7 +44,12 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::get('/enseignants', [ControllerEnseignants::class, 'index']);
     Route::put('/enseignant/{id}', [ControllerEnseignants::class, 'update']);
     Route::delete('/enseignant/{id}', [ControllerEnseignants::class, 'destroy']);
+    Route::post('/parent/register', [ControllerParents::class, 'register']);
+    Route::put('/parent/{parentId}/link-student', [ControllerParents::class, 'linkStudent']);
+    Route::get('/parent/{parentId}/students', [ControllerParents::class, 'getStudents']);
+    Route::get('/parents', [ControllerParents::class, 'index']);
 });
+
 
 Route::middleware(['auth:sanctum', 'role:enseignant'])->group(function () {
     Route::post('/notes', [ControllerNotes::class, 'store']);
@@ -56,6 +62,7 @@ Route::middleware(['auth:sanctum', 'role:eleve,parent'])->group(function () {
     Route::get('/etudiants/{etudiantId}/bulletin/{semestre}', [ControllerNotes::class, 'calculateBulletin']);
     Route::get('/portail/bulletins/{userId}', [ControllerNotes::class, 'getBulletins']);
     Route::get('/portail/bulletins/{userId}/{semestre}/download', [ControllerNotes::class, 'downloadBulletin']);
+    Route::get('/portail/bulletins/{userId}/{semestre}/{studentId?}/download', [ControllerNotes::class, 'downloadBulletin']);
 });
 
 Route::post('/register', [UserController::class, 'register'])->name('register');
