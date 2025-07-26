@@ -13,41 +13,24 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
-        'role_id'
+        'role_id',
+        'etudiant_id'
     ];
 
-    //protected $dates = ['email_verified_at'];
-
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
-     */
     protected $casts = [
-       // 'email_verified_at' => 'datetime',
-       // 'password' => 'hashed',
+        // 'email_verified_at' => 'datetime',
     ];
 
-    public function Role()
+    public function role()
     {
         return $this->belongsTo(Role::class);
     }
@@ -55,5 +38,22 @@ class User extends Authenticatable implements MustVerifyEmail
     public function students()
     {
         return $this->belongsToMany(Etudiant::class, 'parent_student', 'user_id', 'student_id');
+    }
+
+    public function etudiant()
+    {
+        return $this->belongsTo(Etudiant::class, 'etudiant_id');
+    }
+
+    public function classes()
+    {
+        return $this->belongsToMany(Classe::class, 'enseignant_matiere', 'enseignant_id', 'classe_id')
+                    ->withPivot('matiere_id');
+    }
+
+    public function matieres()
+    {
+        return $this->belongsToMany(Matiere::class, 'enseignant_matiere', 'enseignant_id', 'matiere_id')
+                    ->withPivot('classe_id');
     }
 }

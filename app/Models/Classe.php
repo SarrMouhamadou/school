@@ -11,12 +11,15 @@ class Classe extends Model
 
     protected $table = 'classes';
     protected $fillable = ['nom'];
-    protected function etudiants()
+
+    public function etudiants()
     {
         return $this->hasMany(Etudiant::class, 'classe_id');
     }
+
     public function enseignants()
     {
-        return $this->belongsToMany(Enseignant::class, 'enseignant_matiere', 'classe_id', 'enseignant_id');
+        return $this->belongsToMany(User::class, 'enseignant_matiere', 'classe_id', 'enseignant_id')
+                    ->withPivot('matiere_id');
     }
 }

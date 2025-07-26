@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Etudiant;
 use App\Models\Matiere;
 use App\Models\Note;
+use App\Models\Enseignant;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ControllerNotes extends Controller
 {
@@ -49,6 +51,11 @@ class ControllerNotes extends Controller
 
     public function store(Request $request)
     {
+        $user = auth()->user();
+        if (!$user || $user->role->name !== 'enseignant') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
         try {
             $request->validate([
                 'etudiant_id' => 'required|exists:students,id',
@@ -57,6 +64,12 @@ class ControllerNotes extends Controller
                 'semestre' => 'required|in:S1,S2',
                 'type_evaluation' => 'required|in:devoir,examen',
             ]);
+
+            // Vérifier si l'enseignant est autorisé pour cette matière
+            $enseignant = Enseignant::where('user_id', $user->id)->first();
+            if (!$enseignant || !$enseignant->matieres()->where('matiere_id', $request->matiere_id)->exists()) {
+                return response()->json(['message' => 'Vous n\'êtes pas autorisé à saisir des notes pour cette matière.'], 403);
+            }
 
             $existingNote = Note::where([
                 'etudiant_id' => $request->etudiant_id,
@@ -96,61 +109,107 @@ class ControllerNotes extends Controller
 
     public function update(Request $request, $id)
     {
-        $note = Note::findOrFail($id);
-
-        $request->validate([
-            'etudiant_id' => 'sometimes|exists:students,id',
-            'matiere_id' => 'sometimes|exists:matieres,id',
-            'valeur' => 'sometimes|required|numeric|min:0|max:20',
-            'semestre' => 'sometimes|in:S1,S2',
-            'type_evaluation' => 'sometimes|in:devoir,examen',
-        ]);
-
-        $existingNote = Note::where([
-            'etudiant_id' => $request->etudiant_id ?? $note->etudiant_id,
-            'matiere_id' => $request->matiere_id ?? $note->matiere_id,
-            'semestre' => $request->semestre ?? $note->semestre,
-            'type_evaluation' => $request->type_evaluation ?? $note->type_evaluation,
-        ])->where('id', '!=', $id)->first();
-
-        if ($existingNote) {
-            return response()->json([
-                'message' => 'Une note existe déjà pour cette évaluation.',
-                'status' => false
-            ], 400);
+        $user = auth()->user();
+        if (!$user || $user->role->name !== 'enseignant') {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $note->update($request->only(['etudiant_id', 'matiere_id', 'valeur', 'semestre', 'type_evaluation']));
+        $note = Note::findOrFail($id);
 
-        return response()->json([
-            'message' => 'Note mise à jour avec succès.',
-            'note' => $note,
-            'status' => true
-        ], 200);
+        try {
+            $request->validate([
+                'etudiant_id' => 'sometimes|exists:students,id',
+                'matiere_id' => 'sometimes|exists:matieres,id',
+                'valeur' => 'sometimes|required|numeric|min:0|max:20',
+                'semestre' => 'sometimes|in:S1,S2',
+                'type_evaluation' => 'sometimes|in:devoir,examen',
+            ]);
+
+            // Vérifier si l'enseignant est autorisé pour cette matière
+            $enseignant = Enseignant::where('user_id', $user->id)->first();
+            $matiereId = $request->matiere_id ?? $note->matiere_id;
+            if (!$enseignant || !$enseignant->matieres()->where('matiere_id', $matiereId)->exists()) {
+                return response()->json(['message' => 'Vous n\'êtes pas autorisé à modifier des notes pour cette matière.'], 403);
+            }
+
+            $existingNote = Note::where([
+                'etudiant_id' => $request->etudiant_id ?? $note->etudiant_id,
+                'matiere_id' => $matiereId,
+                'semestre' => $request->semestre ?? $note->semestre,
+                'type_evaluation' => $request->type_evaluation ?? $note->type_evaluation,
+            ])->where('id', '!=', $id)->first();
+
+            if ($existingNote) {
+                return response()->json([
+                    'message' => 'Une note existe déjà pour cette évaluation.',
+                    'status' => false
+                ], 400);
+            }
+
+            $note->update($request->only(['etudiant_id', 'matiere_id', 'valeur', 'semestre', 'type_evaluation']));
+
+            return response()->json([
+                'message' => 'Note mise à jour avec succès.',
+                'note' => $note,
+                'status' => true
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Les données fournies sont invalides.',
+                'errors' => $e->errors(),
+                'status' => false
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Une erreur est survenue.',
+                'error' => $e->getMessage(),
+                'status' => false
+            ], 500);
+        }
     }
 
     public function destroy($id)
     {
-        $note = Note::findOrFail($id);
-        $semestre = $note->semestre;
-        $etudiantId = $note->etudiant_id;
-        $note->delete();
-
-        $remainingNotes = Note::where('etudiant_id', $etudiantId)->where('semestre', $semestre)->get();
-        $hasCompleteNotes = $remainingNotes->groupBy('matiere_id')->every(function ($matiereNotes) {
-            return $matiereNotes->where('type_evaluation', 'devoir')->first() && $matiereNotes->where('type_evaluation', 'examen')->first();
-        });
-        if (!$hasCompleteNotes) {
-            return response()->json([
-                'message' => 'Note supprimée, mais le semestre est maintenant incomplet.',
-                'status' => true
-            ], 200);
+        $user = auth()->user();
+        if (!$user || $user->role->name !== 'enseignant') {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        return response()->json([
-            'message' => 'Note supprimée avec succès.',
-            'status' => true
-        ], 200);
+        $note = Note::findOrFail($id);
+
+        try {
+            // Vérifier si l'enseignant est autorisé pour cette matière
+            $enseignant = Enseignant::where('user_id', $user->id)->first();
+            if (!$enseignant || !$enseignant->matieres()->where('matiere_id', $note->matiere_id)->exists()) {
+                return response()->json(['message' => 'Vous n\'êtes pas autorisé à supprimer des notes pour cette matière.'], 403);
+            }
+
+            $semestre = $note->semestre;
+            $etudiantId = $note->etudiant_id;
+            $note->delete();
+
+            $remainingNotes = Note::where('etudiant_id', $etudiantId)->where('semestre', $semestre)->get();
+            $hasCompleteNotes = $remainingNotes->groupBy('matiere_id')->every(function ($matiereNotes) {
+                return $matiereNotes->where('type_evaluation', 'devoir')->first() && $matiereNotes->where('type_evaluation', 'examen')->first();
+            });
+            if (!$hasCompleteNotes) {
+                return response()->json([
+                    'message' => 'Note supprimée, mais le semestre est maintenant incomplet.',
+                    'status' => true
+                ], 200);
+            }
+
+            return response()->json([
+                'message' => 'Note supprimée avec succès.',
+                'status' => true
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Une erreur est survenue.',
+                'error' => $e->getMessage(),
+                'status' => false
+            ], 500);
+        }
     }
 
     public function getStudentNotes($etudiantId, $semestre)
@@ -160,7 +219,7 @@ class ControllerNotes extends Controller
             return response()->json(['message' => 'Accès non autorisé.', 'status' => false], 403);
         }
 
-        $allowedEtudiantId = $user->role->name === 'eleve' ? $user->id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
+        $allowedEtudiantId = $user->role->name === 'eleve' ? $user->etudiant_id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
         if ($etudiantId != $allowedEtudiantId) {
             return response()->json(['message' => 'Accès non autorisé à cet étudiant.', 'status' => false], 403);
         }
@@ -197,7 +256,7 @@ class ControllerNotes extends Controller
             return response()->json(['message' => 'Accès non autorisé.', 'status' => false], 403);
         }
 
-        $allowedEtudiantId = $user->role->name === 'eleve' ? $user->id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
+        $allowedEtudiantId = $user->role->name === 'eleve' ? $user->etudiant_id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
         if ($etudiantId != $allowedEtudiantId) {
             return response()->json(['message' => 'Accès non autorisé à cet étudiant.', 'status' => false], 403);
         }
@@ -293,7 +352,7 @@ class ControllerNotes extends Controller
             return response()->json(['message' => 'Accès non autorisé.', 'status' => false], 403);
         }
 
-        $etudiantId = $user->role->name === 'eleve' ? $user->id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
+        $etudiantId = $user->role->name === 'eleve' ? $user->etudiant_id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
         if (!$etudiantId) {
             return response()->json(['message' => 'Aucun étudiant associé.', 'status' => false], 404);
         }
@@ -320,7 +379,7 @@ class ControllerNotes extends Controller
             return response()->json(['message' => 'Accès non autorisé.', 'status' => false], 403);
         }
 
-        $etudiantId = $user->role->name === 'eleve' ? $user->id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
+        $etudiantId = $user->role->name === 'eleve' ? $user->etudiant_id : ($user->etudiant_id ?? $this->getParentStudentId($user->id));
         if (!$etudiantId) {
             return response()->json(['message' => 'Aucun étudiant associé.', 'status' => false], 404);
         }
@@ -330,8 +389,9 @@ class ControllerNotes extends Controller
             return response()->json($bulletin, 400);
         }
 
-        $pdf = \PDF::loadView('bulletin.pdf', $bulletin);
+        $pdf = \PDF::loadView('bulletin.pdf', ['bulletin' => $bulletin]);
         return $pdf->download('bulletin_' . $etudiantId . '_S' . $semestre . '.pdf');
+
     }
 
     private function getMention($moyenne)

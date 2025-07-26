@@ -7,19 +7,26 @@ use Illuminate\Http\Request;
 use App\Models\Enseignant;
 use App\Models\Matiere;
 use App\Models\Classe;
+use App\Models\Role;
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+
+
 
 class ControllerEnseignants extends Controller
 {
     public function storeEnseignant(Request $request)
     {
         try {
+            \Log::info('Validation des données : ' . json_encode($request->all()));
             $request->validate([
                 'nom' => 'required|string|max:255',
                 'prenom' => 'required|string|max:255',
-                'email' => 'required|email|unique:enseignants,email',
+                'email' => 'required|email|unique:users,email',
+                'password' => 'required|string|min:6',
             ]);
 
-            // Générer un matricule unique (ex. : EYYYYNNN, où YYYY est l'année et NNN un numéro séquentiel)
             $year = date('Y');
             $lastMatricule = Enseignant::max('matricule');
             $nextNumber = $lastMatricule ? (int) substr($lastMatricule, -3) + 1 : 1;
@@ -29,6 +36,25 @@ class ControllerEnseignants extends Controller
                 $request->only(['nom', 'prenom', 'email']),
                 ['matricule' => $matricule]
             ));
+            \Log::info('Enseignant créé : ' . $enseignant->id);
+
+            $role = Role::where('name', 'enseignant')->firstOrFail();
+            \Log::info('Rôle trouvé : ' . $role->id);
+
+            $user = User::create([
+                'name' => $request->prenom . ' ' . $request->nom,
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role_id' => $role->id,
+                'etudiant_id' => null,
+            ]);
+            \Log::info('Utilisateur créé : ' . $user->id);
+
+            // Lier l'enseignant à l'utilisateur
+            $enseignant->update(['user_id' => $user->id]);
+
+            // Générer un token Sanctum
+            $token = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
                 'message' => 'Enseignant créé avec succès.',
@@ -39,16 +65,34 @@ class ControllerEnseignants extends Controller
                     'email' => $enseignant->email,
                     'matricule' => $enseignant->matricule,
                 ],
+                'token' => $token,
                 'status' => true
             ], 201);
         } catch (\Exception $e) {
+            \Log::error('Erreur création enseignant: ' . $e->getMessage());
             return response()->json([
                 'message' => 'Erreur lors de la création de l\'enseignant : ' . $e->getMessage(),
                 'status' => false
             ], 500);
         }
     }
+    public function affecterClasse(Request $request, $enseignant_id)
+    {
+        $request->validate([
+            'classe_id' => 'required|exists:classes,id',
+        ]);
 
+        $enseignant = User::findOrFail($enseignant_id);
+        $classe = Classe::findOrFail($request->classe_id);
+
+        $enseignant->classes()->attach($classe->id);
+
+        return response()->json([
+            'message' => 'Classe affectée à l\'enseignant avec succès.',
+            'enseignant' => $enseignant->load('classes'),
+            'status' => true
+        ], 201);
+    }
     public function affecterMatiere(Request $request)
     {
         $request->validate([
@@ -151,24 +195,37 @@ class ControllerEnseignants extends Controller
     public function destroy($id)
     {
         try {
+            // Trouver l'enseignant
             $enseignant = Enseignant::findOrFail($id);
 
-            if ($enseignant->matieres()->exists()) {
+            // Vérifier si l'utilisateur connecté est un admin (facultatif, car géré par le middleware)
+            if (auth()->user()->role->name !== 'admin') {
                 return response()->json([
-                    'message' => 'Impossible de supprimer : cet enseignant est affecté à une matière.',
+                    'message' => 'Unauthorized: Seuls les admins peuvent supprimer un enseignant.',
                     'status' => false
-                ], 400);
+                ], 403);
             }
 
+            // Trouver l'utilisateur associé via la relation
+            $user = $enseignant->user;
+
+            // Supprimer l'enseignant
             $enseignant->delete();
 
+            // Supprimer l'utilisateur associé s'il existe
+            if ($user) {
+                $user->delete();
+                Log::info('Utilisateur supprimé : ' . $user->id);
+            }
+
             return response()->json([
-                'message' => 'Enseignant supprimé avec succès.',
+                'message' => 'Enseignant et utilisateur associé supprimés avec succès.',
                 'status' => true
             ], 200);
         } catch (\Exception $e) {
+            Log::error('Erreur lors de la suppression de l\'enseignant : ' . $e->getMessage());
             return response()->json([
-                'message' => 'Erreur lors de la suppression : ' . $e->getMessage(),
+                'message' => 'Erreur lors de la suppression de l\'enseignant : ' . $e->getMessage(),
                 'status' => false
             ], 500);
         }

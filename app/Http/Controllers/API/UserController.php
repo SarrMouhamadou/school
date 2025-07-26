@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Role;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
@@ -15,8 +16,15 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|exists:roles,name', // Utilise le nom du rôle
+            'role' => 'required|exists:roles,name',
         ]);
+
+        if ($request->role === 'eleve') {
+            return response()->json([
+                'message' => 'La création d\'un élève doit se faire via l\'inscription d\'un étudiant (/etudiant/inscrire).',
+                'status' => false
+            ], 403);
+        }
 
         $user = User::create([
             'name' => $request->name,
@@ -24,7 +32,6 @@ class UserController extends Controller
             'password' => bcrypt($request->password),
         ]);
 
-        // Associer le rôle
         $user->role()->associate(Role::where('name', $request->role)->first());
         $user->save();
 
@@ -49,11 +56,11 @@ class UserController extends Controller
             'password' => 'required|string',
         ]);
 
-        if (!auth()->attempt($request->only('email', 'password'))) {
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
-
-        $user = auth()->user();
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -74,6 +81,34 @@ class UserController extends Controller
         auth()->user()->tokens()->delete();
         return response()->json([
             'message' => 'Successfully logged out',
+            'status' => true
+        ], 200);
+    }
+
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
+        // Vérifier si l'utilisateur a le rôle 'admin'
+        if (!$user || $user->role->name !== 'admin') {
+            return response()->json([
+                'message' => 'Unauthorized ! Only admins can view all users',
+                'status' => false
+            ], 403);
+        }
+
+        // Récupérer tous les utilisateurs avec leur rôle
+        $users = User::with('role')->get()->map(function ($user) {
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'role' => $user->role ? $user->role->name : null,
+            ];
+        });
+
+        return response()->json([
+            'users' => $users,
             'status' => true
         ], 200);
     }
