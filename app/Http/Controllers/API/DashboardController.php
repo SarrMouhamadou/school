@@ -11,6 +11,7 @@ use App\Models\Matiere;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use PDF;
 
 class DashboardController extends Controller
 {
@@ -68,7 +69,8 @@ class DashboardController extends Controller
                 foreach ($semestres as $s) {
                     $moyennes = $etudiants->map(function ($etudiant) use ($s) {
                         $notes = $etudiant->notes->where('semestre', $s);
-                        if ($notes->isEmpty()) return null;
+                        if ($notes->isEmpty())
+                            return null;
                         $moyennesMatieres = $notes->groupBy('matiere_id')->map(function ($matiereNotes) {
                             $devoir = $matiereNotes->where('type_evaluation', 'devoir')->first();
                             $examen = $matiereNotes->where('type_evaluation', 'examen')->first();
@@ -91,7 +93,8 @@ class DashboardController extends Controller
                 ->get()
                 ->map(function ($etudiant) use ($semestres) {
                     $notes = $etudiant->notes->whereIn('semestre', $semestres);
-                    if ($notes->isEmpty()) return null;
+                    if ($notes->isEmpty())
+                        return null;
                     $moyenneGenerale = $notes->groupBy('matiere_id')->map(function ($matiereNotes) {
                         $devoir = $matiereNotes->where('type_evaluation', 'devoir')->first();
                         $examen = $matiereNotes->where('type_evaluation', 'examen')->first();
@@ -132,5 +135,142 @@ class DashboardController extends Controller
         }
 
         return response()->json($response, 200);
+    }
+
+    public function downloadClassBulletins($classeId, $semestre)
+    {
+        if (auth()->user()->role->name !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $classe = Classe::findOrFail($classeId);
+        $etudiants = $classe->etudiants;
+        $zip = new \ZipArchive();
+        $zipFileName = 'bulletins_classe_' . $classeId . '_S' . $semestre . '.zip';
+        $zip->open($zipFileName, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+
+        foreach ($etudiants as $etudiant) {
+            $bulletin = $this->calculateBulletinForAdmin($etudiant->id, $semestre)->getData();
+            if ($bulletin->status) {
+                $pdf = PDF::loadView('bulletin.pdf', ['bulletin' => $bulletin]);
+                $pdfContent = $pdf->output();
+                $zip->addFromString('bulletin_' . $etudiant->id . '_S' . $semestre . '.pdf', $pdfContent);
+            }
+        }
+
+        $zip->close();
+        return response()->download($zipFileName)->deleteFileAfterSend(true);
+    }
+
+    private function calculateBulletinForAdmin($etudiantId, $semestre)
+    {
+        $etudiant = Etudiant::with(['notes.matiere'])->findOrFail($etudiantId);
+        $notes = $etudiant->notes->where('semestre', $semestre);
+
+        $moyennesMatieres = [];
+        $totalPoints = 0;
+        $totalWeighted = 0;
+
+        foreach ($notes->groupBy('matiere_id') as $matiereId => $matiereNotes) {
+            $devoir = $matiereNotes->where('type_evaluation', 'devoir')->first();
+            $examen = $matiereNotes->where('type_evaluation', 'examen')->first();
+
+            if ($devoir && $examen) {
+                $moyenneMatiere = ($devoir->valeur * 0.4) + ($examen->valeur * 0.6);
+                $matiere = Matiere::find($matiereId);
+                $moyennesMatieres[$matiere->nom] = number_format($moyenneMatiere, 2);
+
+                $totalPoints += $moyenneMatiere * $matiere->coefficient;
+                $totalWeighted += $matiere->coefficient;
+            }
+        }
+
+        if ($totalWeighted == 0) {
+            return response()->json([
+                'message' => 'Aucune note disponible pour ce semestre.',
+                'status' => false
+            ], 400);
+        }
+
+        $moyenneGenerale = $totalPoints / $totalWeighted;
+        $mention = $this->getMention($moyenneGenerale);
+
+        $classeId = $etudiant->classe_id;
+        $classMoyennes = Etudiant::where('classe_id', $classeId)
+            ->with(['notes.matiere'])
+            ->get()
+            ->filter(function ($e) use ($semestre) {
+                $notes = $e->notes->where('semestre', $semestre);
+                $hasCompleteNotes = $notes->groupBy('matiere_id')->every(function ($matiereNotes) {
+                    return $matiereNotes->where('type_evaluation', 'devoir')->first() && $matiereNotes->where('type_evaluation', 'examen')->first();
+                });
+                return $hasCompleteNotes;
+            })
+            ->map(function ($e) use ($semestre) {
+                $notes = $e->notes->where('semestre', $semestre);
+                $totalPoints = 0;
+                $totalWeighted = 0;
+                foreach ($notes->groupBy('matiere_id') as $matiereId => $matiereNotes) {
+                    $devoir = $matiereNotes->where('type_evaluation', 'devoir')->first();
+                    $examen = $matiereNotes->where('type_evaluation', 'examen')->first();
+                    if ($devoir && $examen) {
+                        $moyenneMatiere = ($devoir->valeur * 0.4) + ($examen->valeur * 0.6);
+                        $matiere = Matiere::find($matiereId);
+                        $totalPoints += $moyenneMatiere * $matiere->coefficient;
+                        $totalWeighted += $matiere->coefficient;
+                    }
+                }
+                return $totalWeighted > 0 ? $totalPoints / $totalWeighted : 0;
+            })
+            ->sortByDesc(function ($moyenne) {
+                return $moyenne;
+            })
+            ->values();
+
+        $rang = $classMoyennes->search(function ($moyenne) use ($moyenneGenerale) {
+            return abs($moyenne - $moyenneGenerale) < 0.01;
+        }) + 1;
+
+        return response()->json([
+            'message' => 'Bulletin calculé avec succès.',
+            'etudiant' => [
+                'id' => $etudiant->id,
+                'nom' => $etudiant->nom,
+                'prenom' => $etudiant->prenom,
+            ],
+            'semestre' => $semestre,
+            'moyennes_matieres' => $moyennesMatieres,
+            'moyenne_generale' => number_format($moyenneGenerale, 2),
+            'mention' => $mention,
+            'rang' => $rang,
+            'appreciation' => $this->getAppreciation($moyenneGenerale),
+            'status' => true
+        ], 200);
+    }
+
+    private function getMention($moyenne)
+    {
+        if ($moyenne >= 16)
+            return 'Excellent';
+        if ($moyenne >= 14)
+            return 'Très Bien';
+        if ($moyenne >= 12)
+            return 'Bien';
+        if ($moyenne >= 10)
+            return 'Assez Bien';
+        return 'Passable';
+    }
+
+    private function getAppreciation($moyenne)
+    {
+        if ($moyenne >= 16)
+            return 'Excellent effort, continuez ainsi !';
+        if ($moyenne >= 14)
+            return 'Très bon travail, bravo !';
+        if ($moyenne >= 12)
+            return 'Bon travail, à perfectionner.';
+        if ($moyenne >= 10)
+            return 'Satisfaisant, effort à maintenir.';
+        return 'À améliorer, travail supplémentaire requis.';
     }
 }

@@ -8,7 +8,11 @@ use App\Models\Matiere;
 use App\Models\Note;
 use App\Models\Enseignant;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\BulletinAvailable;
 use Illuminate\Support\Facades\DB;
+use PDF;
+use App\Models\User;
 
 class ControllerNotes extends Controller
 {
@@ -327,6 +331,15 @@ class ControllerNotes extends Controller
         $rang = $classMoyennes->search(function ($moyenne) use ($moyenneGenerale) {
             return abs($moyenne - $moyenneGenerale) < 0.01;
         }) + 1;
+
+        // Envoyer notification aux utilisateurs associés (élève ou parents)
+        $users = User::where('etudiant_id', $etudiantId)->orWhereHas('students', function ($q) use ($etudiantId) {
+            $q->where('student_id', $etudiantId);
+        })->get();
+
+        foreach ($users as $user) {
+            Mail::to($user->email)->send(new BulletinAvailable($etudiant, $semestre, $moyenneGenerale));
+        }
 
         return response()->json([
             'message' => 'Bulletin calculé avec succès.',

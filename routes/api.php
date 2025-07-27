@@ -51,6 +51,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
     Route::get('/parents', [ControllerParents::class, 'index']);
     Route::get('/dashboard', [DashboardController::class, 'index']);
     Route::get('/dashboard/{semestre?}', [DashboardController::class, 'index'])->where('semestre', 'S1|S2');
+    Route::get('/dashboard/{classeId}/bulletins/{semestre}/download', [DashboardController::class, 'downloadClassBulletins']);
 });
 
 
