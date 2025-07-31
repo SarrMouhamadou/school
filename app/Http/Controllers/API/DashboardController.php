@@ -15,6 +15,107 @@ use PDF;
 
 class DashboardController extends Controller
 {
+    /**
+     * Statistiques des notes pour le dashboard admin (sans exposer la liste brute des notes)
+     */
+    public function noteStats(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user || $user->role->name !== 'admin') {
+            return response()->json(['message' => 'Unauthorized ! Only admins can view the dashboard', 'status' => false], 403);
+        }
+
+        $semestres = ['S1', 'S2'];
+        $noteCount = Note::count();
+        $hasData = $noteCount > 0;
+        $message = $hasData ? 'Statistiques notes récupérées avec succès.' : 'Aucune note en base.';
+
+        // Statistiques globales
+        $stats = [
+            'total_notes' => $noteCount,
+            'notes_par_semestre' => [
+                'S1' => Note::where('semestre', 'S1')->count(),
+                'S2' => Note::where('semestre', 'S2')->count(),
+            ],
+        ];
+
+        // Moyennes par classe
+        $moyennes_classes = Classe::with(['etudiants.notes.matiere'])->get()->map(function ($classe) use ($semestres) {
+            $etudiants = $classe->etudiants;
+            if ($etudiants->isEmpty()) {
+                return ['nom' => $classe->nom, 'moyenne' => null];
+            }
+            $totalMoyennes = collect();
+            foreach ($semestres as $s) {
+                $moyennes = $etudiants->map(function ($etudiant) use ($s) {
+                    $notes = $etudiant->notes->where('semestre', $s);
+                    if ($notes->isEmpty())
+                        return null;
+                    $moyennesMatieres = $notes->groupBy('matiere_id')->map(function ($matiereNotes) {
+                        $devoir = $matiereNotes->where('type_evaluation', 'devoir')->first();
+                        $examen = $matiereNotes->where('type_evaluation', 'examen')->first();
+                        if ($devoir && $examen) {
+                            return ($devoir->valeur * 0.4) + ($examen->valeur * 0.6);
+                        }
+                        return null;
+                    })->filter()->avg();
+                    return $moyennesMatieres ?: null;
+                })->filter()->avg();
+                if ($moyennes !== null) {
+                    $totalMoyennes->push($moyennes);
+                }
+            }
+            $moyenne = $totalMoyennes->avg() ? number_format($totalMoyennes->avg(), 2) : null;
+            return ['nom' => $classe->nom, 'moyenne' => $moyenne];
+        });
+
+        // Top 5 élèves toutes classes confondues
+        $top_eleves = Etudiant::with(['notes.matiere'])
+            ->get()
+            ->map(function ($etudiant) use ($semestres) {
+                $notes = $etudiant->notes->whereIn('semestre', $semestres);
+                if ($notes->isEmpty())
+                    return null;
+                $moyenneGenerale = $notes->groupBy('matiere_id')->map(function ($matiereNotes) {
+                    $devoir = $matiereNotes->where('type_evaluation', 'devoir')->first();
+                    $examen = $matiereNotes->where('type_evaluation', 'examen')->first();
+                    if ($devoir && $examen) {
+                        return ($devoir->valeur * 0.4) + ($examen->valeur * 0.6);
+                    }
+                    return null;
+                })->filter()->avg();
+                return [
+                    'id' => $etudiant->id,
+                    'nom' => $etudiant->nom,
+                    'prenom' => $etudiant->prenom,
+                    'moyenne_generale' => $moyenneGenerale ? number_format($moyenneGenerale, 2) : null,
+                ];
+            })
+            ->filter()
+            ->sortByDesc('moyenne_generale')
+            ->take(5)
+            ->values();
+
+        // Matières par enseignant
+        $matieres_par_enseignant = Enseignant::with('matieres')->get()->map(function ($enseignant) {
+            return [
+                'id' => $enseignant->id,
+                'nom' => $enseignant->nom,
+                'prenom' => $enseignant->prenom,
+                'matieres' => $enseignant->matieres->pluck('nom')->unique()->values(),
+            ];
+        });
+
+        return response()->json([
+            'message' => $message,
+            'stats' => $stats,
+            'moyennes_classes' => $moyennes_classes,
+            'top_eleves' => $top_eleves,
+            'matieres_par_enseignant' => $matieres_par_enseignant,
+            'status' => true
+        ], 200);
+    }
+
     public function index($semestre = null)
     {
         $user = auth()->user();

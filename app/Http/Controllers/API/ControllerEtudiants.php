@@ -104,52 +104,102 @@ class ControllerEtudiants extends Controller
 
     public function update(Request $request, $id)
     {
-        $etudiant = Etudiant::find($id);
+        try {
+            // Charger l'étudiant avec la relation user et classe
+            $etudiant = Etudiant::with('user', 'classe')->find($id);
 
-        if (!$etudiant) {
+            if (!$etudiant) {
+                \Log::error('Étudiant non trouvé : ' . $id);
+                return response()->json([
+                    'message' => 'Étudiant non trouvé.',
+                    'status' => false
+                ], 404);
+            }
+
+            // Validation des données
+            $request->validate([
+                'prenom' => 'sometimes|required|string|max:255',
+                'nom' => 'sometimes|required|string|max:255',
+                'date_de_naissance' => 'sometimes|required|date|before:today',
+                'classe' => 'nullable|string|exists:classes,nom',
+                'email' => 'sometimes|email|max:255|unique:users,email,' . ($etudiant->user ? $etudiant->user->id : 'NULL'),
+            ]);
+
+            // Recherche de la classe si fournie
+            $classeNomEntree = $request->input('classe');
+            $classe = $classeNomEntree ? Classe::whereRaw('LOWER(nom) = LOWER(?)', [$classeNomEntree])->first() : null;
+
+            if ($classeNomEntree && !$classe) {
+                \Log::error('Classe non trouvée : ' . $classeNomEntree);
+                return response()->json([
+                    'message' => 'Erreur : la classe ' . $classeNomEntree . ' n\'existe pas.',
+                    'status' => false
+                ], 400);
+            }
+
+            // Mettre à jour les champs de l'étudiant
+            $etudiant->update([
+                'prenom' => $request->input('prenom', $etudiant->prenom),
+                'nom' => $request->input('nom', $etudiant->nom),
+                'date_de_naissance' => $request->input('date_de_naissance', $etudiant->date_de_naissance),
+                'classe_id' => $classe ? $classe->id : $etudiant->classe_id,
+            ]);
+
+            // Mettre à jour l'utilisateur associé si nécessaire
+            if ($etudiant->user) {
+                $user = $etudiant->user;
+                $updateUserData = [];
+
+                // Mettre à jour l'email si fourni
+                if ($request->filled('email')) {
+                    $updateUserData['email'] = $request->input('email');
+                }
+
+                // Mettre à jour le champ name si prenom ou nom sont fournis
+                if ($request->filled('prenom') || $request->filled('nom')) {
+                    $updateUserData['name'] = ($request->filled('prenom') ? $request->input('prenom') : $etudiant->prenom) . ' ' .
+                        ($request->filled('nom') ? $request->input('nom') : $etudiant->nom);
+                }
+
+                // Appliquer les modifications à l'utilisateur si des données ont changé
+                if (!empty($updateUserData)) {
+                    $user->update($updateUserData);
+                    \Log::info('Utilisateur mis à jour : ' . $user->id . ' avec ' . json_encode($updateUserData));
+                }
+            } else {
+                \Log::error('Aucun utilisateur associé à l\'étudiant : ' . $etudiant->id);
+                return response()->json([
+                    'message' => 'Erreur : aucun utilisateur associé à cet étudiant.',
+                    'status' => false
+                ], 400);
+            }
+
+            // Rafraîchir les relations pour avoir les dernières valeurs
+            $etudiant->refresh();
+
             return response()->json([
-                'message' => 'Étudiant non trouvé.',
-                'status' => false
-            ], 404);
+                'message' => 'Étudiant mis à jour avec succès.',
+                'etudiant' => [
+                    'id' => $etudiant->id,
+                    'prenom' => $etudiant->prenom,
+                    'nom' => $etudiant->nom,
+                    'matricule' => $etudiant->matricule,
+                    'date_de_naissance' => $etudiant->date_de_naissance,
+                    'classe' => $etudiant->classe ? $etudiant->classe->nom : null,
+                    'user' => $etudiant->user ? [
+                        'email' => $etudiant->user->email,
+                        'name' => $etudiant->user->name
+                    ] : null,
+                ],
+                'status' => true
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Erreur de validation : ' . json_encode($e->errors()));
+            return response()->json(['message' => 'Erreur de validation', 'errors' => $e->errors()], 422);
+        } catch (\Exception $e) {
+            \Log::error('Erreur lors de la mise à jour de l\'étudiant : ' . $e->getMessage());
+            return response()->json(['message' => 'Erreur serveur : ' . $e->getMessage()], 500);
         }
-
-        $request->validate([
-            'prenom' => 'sometimes|required|string|max:255',
-            'nom' => 'sometimes|required|string|max:255',
-            'date_de_naissance' => 'sometimes|required|date|before:today',
-            'classe' => 'nullable|string|max:255',
-        ]);
-
-        $classeNomEntree = $request->input('classe');
-        $classe = $classeNomEntree ? Classe::whereRaw('LOWER(nom) = LOWER(?)', [$classeNomEntree])->first() : null;
-
-        if ($classeNomEntree && !$classe) {
-            return response()->json([
-                'message' => 'Erreur : la classe ' . $classeNomEntree . ' n\'existe pas.',
-                'status' => false
-            ], 400);
-        }
-
-        $classeId = $classe ? $classe->id : null;
-
-        $etudiant->update([
-            'prenom' => $request->input('prenom', $etudiant->prenom),
-            'nom' => $request->input('nom', $etudiant->nom),
-            'date_de_naissance' => $request->input('date_de_naissance', $etudiant->date_de_naissance),
-            'classe_id' => $classeId,
-        ]);
-
-        return response()->json([
-            'message' => 'Étudiant mis à jour avec succès.',
-            'etudiant' => [
-                'id' => $etudiant->id,
-                'prenom' => $etudiant->prenom,
-                'nom' => $etudiant->nom,
-                'matricule' => $etudiant->matricule,
-                'classe' => $etudiant->classe ? $etudiant->classe->nom : null,
-            ],
-            'status' => true
-        ], 200);
     }
 
     public function destroy($id)
@@ -213,5 +263,42 @@ class ControllerEtudiants extends Controller
             ],
             'status' => true
         ], 200);
+    }
+
+    public function show($id)
+    {
+        try {
+            // Charger l'étudiant avec la relation user et classe
+            $etudiant = Etudiant::with('user', 'classe')->find($id);
+
+            if (!$etudiant) {
+                \Log::error('Étudiant non trouvé : ' . $id);
+                return response()->json([
+                    'message' => 'Étudiant non trouvé.',
+                    'status' => false
+                ], 404);
+            }
+
+            // Préparer les données pour le frontend
+            return response()->json([
+                'message' => 'Détails de l\'étudiant récupérés avec succès.',
+                'etudiant' => [
+                    'id' => $etudiant->id,
+                    'prenom' => $etudiant->prenom,
+                    'nom' => $etudiant->nom,
+                    'matricule' => $etudiant->matricule,
+                    'date_de_naissance' => $etudiant->date_de_naissance,
+                    'classe' => $etudiant->classe ? $etudiant->classe->nom : null,
+                    'email' => $etudiant->user ? $etudiant->user->email : null,
+                ],
+                'status' => true
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Erreur lors de la récupération de l\'étudiant : ' . $e->getMessage());
+            return response()->json([
+                'message' => 'Erreur serveur : ' . $e->getMessage(),
+                'status' => false
+            ], 500);
+        }
     }
 }

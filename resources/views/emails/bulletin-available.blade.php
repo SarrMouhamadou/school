@@ -1,12 +1,17 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Nouveau Bulletin Disponible</title>
-</head>
-<body>
-    <h1>Bonjour {{ $etudiant->prenom }} {{ $etudiant->nom }},</h1>
-    <p>Votre bulletin pour le semestre {{ $semestre }} est maintenant disponible.</p>
-    <p>Moyenne générale : {{ number_format($moyenneGenerale, 2) }}</p>
-    <p>Connectez-vous à l'application pour le consulter.</p>
-</body>
-</html>
+@component('mail::message')
+# Nouveau Bulletin Disponible
+
+Bonjour,
+
+Le bulletin de {{ $etudiant->prenom }} {{ $etudiant->nom }} pour le semestre {{ $semestre }} est disponible.
+Moyenne générale : {{ $moyenneGenerale }}.
+
+Vous pouvez le consulter ou le télécharger depuis votre portail.
+
+@component('mail::button', ['url' => url('/dashboard')])
+Consulter le bulletin
+@endcomponent
+
+Merci,
+{{ config('app.name') }}
+@endcomponent

@@ -162,16 +162,34 @@ class ControllerEnseignants extends Controller
     public function update(Request $request, $id)
     {
         try {
-            $enseignant = Enseignant::findOrFail($id);
+            // Récupère l'enseignant avec son utilisateur associé
+            $enseignant = Enseignant::with('user')->findOrFail($id);
 
+            // Validation des données
             $request->validate([
                 'nom' => 'sometimes|required|string|max:255',
                 'prenom' => 'sometimes|required|string|max:255',
-                'email' => 'sometimes|required|email|unique:enseignants,email,' . $enseignant->id,
+                'email' => 'sometimes|required|email|unique:users,email,' . ($enseignant->user ? $enseignant->user->id : 'NULL'),
                 'matricule' => 'sometimes|required|string|unique:enseignants,matricule,' . $enseignant->id,
             ]);
 
+            // Mettre à jour les champs de l'enseignant
             $enseignant->update($request->only(['nom', 'prenom', 'email', 'matricule']));
+
+            // Mettre à jour l'utilisateur associé si existant
+            if ($enseignant->user) {
+                $userData = [];
+                if ($request->filled('prenom') || $request->filled('nom')) {
+                    $userData['name'] = trim("{$request->input('prenom', $enseignant->prenom)} {$request->input('nom', $enseignant->nom)}");
+                }
+                if ($request->filled('email')) {
+                    $userData['email'] = $request->input('email');
+                }
+
+                if (!empty($userData)) {
+                    $enseignant->user->update($userData);
+                }
+            }
 
             return response()->json([
                 'message' => 'Enseignant mis à jour avec succès.',

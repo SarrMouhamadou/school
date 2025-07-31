@@ -1,75 +1,108 @@
 <?php
 
-use App\Http\Controllers\API\ControllerEtudiants;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\UserController;
-use App\Http\Controllers\API\ControllerClasses;
-use App\Http\Controllers\API\ControllerEnseignants;
-use App\Http\Controllers\API\ControllerMatieres;
-use App\Http\Controllers\API\ControllerNotes;
-use App\Http\Controllers\API\ControllerParents;
-use App\Http\Controllers\API\DashboardController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ClassesController;
+use App\Http\Controllers\EtudiantsController;
+use App\Http\Controllers\EnseignantsController;
+use App\Http\Controllers\MatieresController;
+use App\Http\Controllers\NotesController;
+use App\Http\Controllers\ParentsController;
+use App\Http\Controllers\DashboardController;
 
 /*
 |--------------------------------------------------------------------------
-| API Routes
+| Web Routes
 |--------------------------------------------------------------------------
 |
-| Here is where you can register API routes for your application. These
+| Here is where you can register web routes for your application. These
 | routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
+| be assigned to the "web" middleware group. Make something great!
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', [UserController::class, 'getUser'])->name('user');
+// Page d'accueil
+Route::get('/', function () {
+    return view('welcome');
+})->name('home');
 
-Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    Route::get('/users', [UserController::class, 'index'])->name('users.index');
-    Route::post('/etudiant/inscrire', [ControllerEtudiants::class, 'inscrire']);
-    Route::get('/etudiants', [ControllerEtudiants::class, 'listerEtudiants']);
-    Route::put('/etudiant/{id}', [ControllerEtudiants::class, 'update']);
-    Route::delete('/etudiant/{id}', [ControllerEtudiants::class, 'destroy']);
-    Route::put('/etudiant/{id}/affecter-classe', [ControllerEtudiants::class, 'affecterClasse']); // Ajouter cette ligne
-    Route::put('/etudiant/{id}/affecter-classe', [ControllerEtudiants::class, 'affecterClasse']); // Assurez-vous qu'elle est décommetée
-    Route::post('/classe', [ControllerClasses::class, 'store']);
-    Route::get('/classes', [ControllerClasses::class, 'index']);
-    Route::put('/classe/{id}', [ControllerClasses::class, 'update']);
-    Route::delete('/classe/{id}', [ControllerClasses::class, 'destroy']);
-    Route::post('/matiere', [ControllerMatieres::class, 'store']);
-    Route::get('/matieres', [ControllerMatieres::class, 'index']);
-    Route::put('/matiere/{id}', [ControllerMatieres::class, 'update']);
-    Route::delete('/matiere/{id}', [ControllerMatieres::class, 'destroy']);
-    Route::post('/enseignant', [ControllerEnseignants::class, 'storeEnseignant']);
-    Route::post('/enseignant/affecter-matiere', [ControllerEnseignants::class, 'affecterMatiere']);
-    Route::get('/enseignants', [ControllerEnseignants::class, 'index']);
-    Route::put('/enseignant/{id}', [ControllerEnseignants::class, 'update']);
-    Route::delete('/enseignant/{id}', [ControllerEnseignants::class, 'destroy']);
-    Route::post('/parent/register', [ControllerParents::class, 'register']);
-    Route::put('/parent/{parentId}/link-student', [ControllerParents::class, 'linkStudent']);
-    Route::get('/parent/{parentId}/students', [ControllerParents::class, 'getStudents']);
-    Route::get('/parents', [ControllerParents::class, 'index']);
-    Route::get('/dashboard', [DashboardController::class, 'index']);
-    Route::get('/dashboard/{semestre?}', [DashboardController::class, 'index'])->where('semestre', 'S1|S2');
-    Route::get('/dashboard/{classeId}/bulletins/{semestre}/download', [DashboardController::class, 'downloadClassBulletins']);
+// Routes authentifiées
+Route::middleware(['auth'])->group(function () {
+    // Redirection du dashboard selon le rôle
+    Route::get('/dashboard', function () {
+        $user = auth()->user();
+        \Log::info('Dashboard accessed', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'role_id' => $user->role_id,
+            'role_name' => $user->role ? $user->role->name : 'null'
+        ]);
+
+        if (!$user->role) {
+            \Log::error('User has no role', ['user_id' => $user->id, 'email' => $user->email]);
+            return redirect()->route('home')->with('error', 'Rôle non défini. Contactez l’administrateur.');
+        }
+
+        switch ($user->role->name) {
+            case 'admin':
+                \Log::info('Redirecting to admin.dashboard', ['user_id' => $user->id]);
+                return redirect()->route('admin.dashboard');
+            case 'enseignant':
+                \Log::info('Redirecting to enseignant.dashboard', ['user_id' => $user->id]);
+                return redirect()->route('enseignant.dashboard');
+            case 'eleve':
+                \Log::info('Redirecting to eleve.dashboard', ['user_id' => $user->id]);
+                return redirect()->route('eleve.dashboard');
+            case 'parent':
+                \Log::info('Redirecting to parent.dashboard', ['user_id' => $user->id]);
+                return redirect()->route('parent.dashboard');
+            default:
+                \Log::warning('Unknown role', ['role' => $user->role->name, 'user_id' => $user->id]);
+                return view('dashboard');
+        }
+    })->name('dashboard');
+
+    // Routes pour admin
+    Route::middleware('role:admin')->group(function () {
+        Route::get('/admin/dashboard', [DashboardController::class, 'indexWeb'])->name('admin.dashboard');
+        Route::resource('admin/classes', ClassesController::class)->names('admin.classes');
+        Route::resource('admin/etudiants', EtudiantsController::class)->names('admin.etudiants');
+        Route::resource('admin/enseignants', EnseignantsController::class)->names('admin.enseignants');
+        Route::resource('admin/matieres', MatieresController::class)->names('admin.matieres');
+        Route::resource('admin/parents', ParentsController::class)->names('admin.parents');
+        Route::put('/admin/etudiants/{id}/affecter-classe', [EtudiantsController::class, 'affecterClasse'])->name('admin.etudiants.affecter-classe');
+        Route::put('/admin/enseignants/affecter-matiere', [EnseignantsController::class, 'affecterMatiere'])->name('admin.enseignants.affecter-matiere');
+        Route::get('/admin/bulletins/{classeId}/{semestre}/download', [DashboardController::class, 'downloadClassBulletins'])->name('admin.bulletins.download')->where('semestre', 'S1|S2');
+    });
+
+    // Routes pour enseignant
+    Route::middleware('role:enseignant')->group(function () {
+        Route::get('/enseignant/dashboard', [NotesController::class, 'indexWeb'])->name('enseignant.dashboard');
+        Route::get('/enseignant/notes/create', [NotesController::class, 'create'])->name('enseignant.notes.create');
+        Route::post('/enseignant/notes', [NotesController::class, 'store'])->name('enseignant.notes.store');
+        Route::get('/enseignant/notes/{id}/edit', [NotesController::class, 'edit'])->name('enseignant.notes.edit');
+        Route::put('/enseignant/notes/{id}', [NotesController::class, 'update'])->name('enseignant.notes.update');
+        Route::delete('/enseignant/notes/{id}', [NotesController::class, 'destroy'])->name('enseignant.notes.destroy');
+    });
+
+    // Routes pour élève
+    Route::middleware('role:eleve')->group(function () {
+        Route::get('/eleve/dashboard', [NotesController::class, 'getStudentNotesWeb'])->name('eleve.dashboard');
+        Route::get('/eleve/bulletin/{semestre}', [NotesController::class, 'calculateBulletinWeb'])->name('eleve.bulletin')->where('semestre', 'S1|S2');
+        Route::get('/eleve/bulletin/{semestre}/download', [NotesController::class, 'downloadBulletin'])->name('eleve.bulletin.download')->where('semestre', 'S1|S2');
+    });
+
+    // Routes pour parent
+    Route::middleware('role:parent')->group(function () {
+        Route::get('/parent/dashboard', [ParentsController::class, 'getStudentsWeb'])->name('parent.dashboard');
+        Route::get('/parent/etudiants/{etudiantId}/bulletin/{semestre}', [NotesController::class, 'calculateBulletinWeb'])->name('parent.bulletin')->where('semestre', 'S1|S2');
+        Route::get('/parent/etudiants/{etudiantId}/bulletin/{semestre}/download', [NotesController::class, 'downloadBulletin'])->name('parent.bulletin.download')->where('semestre', 'S1|S2');
+    });
+
+    // Routes de profil (Breeze)
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-
-
-Route::middleware(['auth:sanctum', 'role:enseignant'])->group(function () {
-    Route::post('/notes', [ControllerNotes::class, 'store']);
-    Route::put('/notes/{id}', [ControllerNotes::class, 'update']);
-    Route::delete('/notes/{id}', [ControllerNotes::class, 'destroy']);
-});
-
-Route::middleware(['auth:sanctum', 'role:eleve,parent'])->group(function () {
-    Route::get('/etudiants/{etudiantId}/notes/{semestre}', [ControllerNotes::class, 'getStudentNotes']);
-    Route::get('/etudiants/{etudiantId}/bulletin/{semestre}', [ControllerNotes::class, 'calculateBulletin']);
-    Route::get('/portail/bulletins/{userId}', [ControllerNotes::class, 'getBulletins']);
-    Route::get('/portail/bulletins/{userId}/{semestre}/download', [ControllerNotes::class, 'downloadBulletin']);
-    Route::get('/portail/bulletins/{userId}/{semestre}/{studentId?}/download', [ControllerNotes::class, 'downloadBulletin']);
-});
-
-Route::post('/register', [UserController::class, 'register'])->name('register');
-Route::post('/login', [UserController::class, 'login'])->name('login');
-Route::post('/logout', [UserController::class, 'logout'])->name('logout');
+require __DIR__ . '/auth.php';
